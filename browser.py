@@ -64,6 +64,8 @@ class Layout:
         self.style = "roman"
         self.size = 12
         self.is_title = False
+        self.is_superscript = False
+        self.is_abbr = False
 
         self.line = []
         for tok in tokens:
@@ -93,6 +95,16 @@ class Layout:
             self.size += 4
         elif tok.tag == "/big":
             self.size -= 4
+        elif tok.tag == "sup":
+            self.is_superscript = True
+            self.size = self.normal_size // 2
+        elif tok.tag == "/sup":
+            self.is_superscript = False
+            self.size = self.normal_size
+        elif tok.tag == "abbr":
+            self.is_abbr = True
+        elif tok.tag == "/abbr":
+            self.is_abbr = False
         elif tok.tag == "br":
             self.flush()
         elif tok.tag == "/p":
@@ -109,7 +121,7 @@ class Layout:
                 if line.strip():
                     line_width = font.measure(line)
                     x = (self.width - line_width) / 2
-                    self.display_list.append((x, self.cursor_y, line, font))
+                    self.display_list.append((x, self.cursor_y, line, font, 0))
                     self.cursor_y += font.metrics("linespace")
             return
         else:
@@ -117,21 +129,54 @@ class Layout:
                 self.word(word)
         
     def word(self, word):
+        if self.is_abbr:
+            self.abbr_word(word)
+            return
+        
         font = get_font(self.size, self.weight, self.style)
         w = font.measure(word)
         if self.cursor_x + w > self.width - HSTEP:
             self.flush()
-        self.line.append((self.cursor_x, word, font))
+
+        if self.is_superscript:
+            y_offset = font.metrics("ascent") / 2
+        else:
+            y_offset = 0
+
+        self.line.append((self.cursor_x, word, font, y_offset))
         self.cursor_x += w + font.measure(" ")
+
+    def abbr_word(self, word):
+        normal_font = get_font(self.size, self.weight, self.style)
+        small_font = get_font(int(round(self.size * 0.8,2)), "bold", self.style)
+        
+        x = self.cursor_x
+        for char in word:
+            if char.islower():
+                font = small_font
+                char = char.upper()
+            else:
+                font = normal_font
+            
+            w = font.measure(char)
+            if x + w > self.width - HSTEP:
+                self.flush()
+                x = HSTEP
+            
+            y_offset = 0 if not self.is_superscript else -normal_font.metrics("ascent") // 2
+            self.line.append((x, char, font, y_offset))
+            x += w
+        
+        self.cursor_x = x + normal_font.measure(" ")
 
     def flush(self):
         if not self.line: return
-        metrics = [font.metrics() for x, word, font in self.line]
+        metrics = [font.metrics() for x, word, font, y_offset in self.line]
         max_ascent = max([metric["ascent"] for metric in metrics])
         baseline = self.cursor_y + 1.25 * max_ascent
-        for x, word, font in self.line:
-            y = baseline - font.metrics("ascent")
-            self.display_list.append((x, y, word, font))
+        for x, word, font, y_offset in self.line:
+            y = baseline - font.metrics("ascent") + y_offset
+            self.display_list.append((x, y, word, font, y_offset))
         max_descent = max([metric["descent"] for metric in metrics])
         self.cursor_y = baseline + 1.25 * max_descent
         self.cursor_x = HSTEP
@@ -180,7 +225,7 @@ class Browser:
      
         if should_update:
             self.display_list = Layout(self.text, e.width).display_list
-            self.max_scroll = max(y for x, y, c, font in self.display_list) - self.height + VSTEP
+            self.max_scroll = max(y for x, y, c, font, y_offset in self.display_list) - self.height + VSTEP
             self.scroll = min(self.scroll, self.max_scroll)
             self.draw()
 
@@ -204,7 +249,7 @@ class Browser:
 
     def draw(self):
         self.canvas.delete("all")
-        for x, y, word, font in self.display_list:
+        for x, y, word, font, y_offset in self.display_list:
             if y > self.scroll + self.height: continue
             if y + font.metrics("linespace") < self.scroll: continue
 
@@ -225,7 +270,7 @@ class Browser:
         body = url.request()
         self.text = lex(body)
         self.display_list = Layout(self.text, self.width).display_list
-        self.max_scroll = max(y for x, y, c, font in self.display_list) - self.height + VSTEP
+        self.max_scroll = max(y for x, y, c, font, y_offset in self.display_list) - self.height + VSTEP
         self.scroll = 0
         self.draw()
 
