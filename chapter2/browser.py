@@ -1,9 +1,24 @@
 import tkinter
+from PIL import Image, ImageTk
+from emoji import EmojiCache
 from url import URL
+import os
 
 WIDTH, HEIGHT = 800, 600
 SCROLL_STEP = 100
 HSTEP, VSTEP = 13, 18    
+
+EMOJI_PATH = "emojis/"
+
+
+emojis = EmojiCache("../emojis")
+def load_emoji(emoji_code):
+    emoji = emojis.get_emoji(emoji_code)
+    if emoji:
+        img = Image.open(emoji)
+        img = img.resize((16, 16), Image.LANCZOS)
+        return ImageTk.PhotoImage(img)
+    return None
 
 def lex(body):
     text = ""
@@ -63,6 +78,14 @@ class Browser:
         for x, y, c in self.display_list:
             if y > self.scroll + self.height: continue
             if y + VSTEP < self.scroll: continue
+
+            if len(c) == 1 and ord(c) > 127:  # Simple check for non-ASCII characters
+                emoji_code = hex(ord(c))[2:].lower()
+                print(f"Emoji code: {emoji_code}, character: {c}")
+                emoji_img = load_emoji(emoji_code)
+                if emoji_img:
+                    self.canvas.create_image(x, y - self.scroll, image=emoji_img, anchor="nw")
+                    continue
 
             self.canvas.create_text(x, y - self.scroll, text=c)
 
