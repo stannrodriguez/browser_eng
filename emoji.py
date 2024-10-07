@@ -1,5 +1,6 @@
 import os
 import importlib.util
+from PIL import Image, ImageTk
 
 EMOJI_PATH = "emojis"
 
@@ -22,3 +23,13 @@ class EmojiCache:
                 # Handle case when emoji file doesn't exist
                 self.cache[emoji_code] = None
         return self.cache[emoji_code]
+
+emojis = EmojiCache()
+
+def load_emoji(emoji_code):
+    emoji = emojis.get_emoji(emoji_code)
+    if emoji:
+        img = Image.open(emoji)
+        img = img.resize((16, 16), Image.LANCZOS)
+        return ImageTk.PhotoImage(img)
+    return None

@@ -1,22 +1,11 @@
 import tkinter
-from PIL import Image, ImageTk
-from emoji import EmojiCache
+import tkinter.font
+from emoji import emojis, load_emoji
 from url import URL
-import os
 
 WIDTH, HEIGHT = 800, 600
 SCROLL_STEP = 100
 HSTEP, VSTEP = 13, 18    
-
-emojis = EmojiCache()
-
-def load_emoji(emoji_code):
-    emoji = emojis.get_emoji(emoji_code)
-    if emoji:
-        img = Image.open(emoji)
-        img = img.resize((16, 16), Image.LANCZOS)
-        return ImageTk.PhotoImage(img)
-    return None
 
 def lex(body):
     text = ""
