@@ -1,14 +1,14 @@
 import os
 import importlib.util
 
+EMOJI_PATH = "../emojis/"
 class EmojiCache:
-    def __init__(self, emoji_folder_path):
+    def __init__(self):
         self.cache = {}
-        self.emoji_folder_path = emoji_folder_path
 
     def get_emoji(self, emoji_code):
         if emoji_code not in self.cache:
-            emoji_file_path = os.path.join(self.emoji_folder_path, f"{emoji_code}.py")
+            emoji_file_path = os.path.join(EMOJI_PATH, f"{emoji_code}.py")
             if os.path.exists(emoji_file_path):
                 # Dynamically import the emoji file
                 spec = importlib.util.spec_from_file_location(emoji_code, emoji_file_path)

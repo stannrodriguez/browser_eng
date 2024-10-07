@@ -8,10 +8,8 @@ WIDTH, HEIGHT = 800, 600
 SCROLL_STEP = 100
 HSTEP, VSTEP = 13, 18    
 
-EMOJI_PATH = "emojis/"
+emojis = EmojiCache()
 
-
-emojis = EmojiCache("../emojis")
 def load_emoji(emoji_code):
     emoji = emojis.get_emoji(emoji_code)
     if emoji:
