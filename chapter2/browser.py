@@ -1,13 +1,33 @@
 import tkinter
 from PIL import Image, ImageTk
-from emoji import EmojiCache
 from url import URL
 import os
+import importlib.util
 
 WIDTH, HEIGHT = 800, 600
 SCROLL_STEP = 100
 HSTEP, VSTEP = 13, 18    
+EMOJI_PATH = "../emojis/"
+class EmojiCache:
+    def __init__(self):
+        self.cache = {}
 
+    def get_emoji(self, emoji_code):
+        if emoji_code not in self.cache:
+            emoji_file_path = os.path.join(EMOJI_PATH, f"{emoji_code}.py")
+            if os.path.exists(emoji_file_path):
+                # Dynamically import the emoji file
+                spec = importlib.util.spec_from_file_location(emoji_code, emoji_file_path)
+                emoji_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(emoji_module)
+                
+                # Assuming each emoji file has a 'emoji' variable
+                self.cache[emoji_code] = emoji_module.emoji
+            else:
+                # Handle case when emoji file doesn't exist
+                self.cache[emoji_code] = None
+        return self.cache[emoji_code]
+    
 emojis = EmojiCache()
 
 def load_emoji(emoji_code):
@@ -79,7 +99,6 @@ class Browser:
 
             if len(c) == 1 and ord(c) > 127:  # Simple check for non-ASCII characters
                 emoji_code = hex(ord(c))[2:].lower()
-                print(f"Emoji code: {emoji_code}, character: {c}")
                 emoji_img = load_emoji(emoji_code)
                 if emoji_img:
                     self.canvas.create_image(x, y - self.scroll, image=emoji_img, anchor="nw")

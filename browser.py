@@ -79,7 +79,6 @@ class Browser:
 
             if len(c) == 1 and ord(c) > 127:  # Simple check for non-ASCII characters
                 emoji_code = hex(ord(c))[2:].lower()
-                print(f"Emoji code: {emoji_code}, character: {c}")
                 emoji_img = load_emoji(emoji_code)
                 if emoji_img:
                     self.canvas.create_image(x, y - self.scroll, image=emoji_img, anchor="nw")
