@@ -100,11 +100,21 @@ class Browser:
             )
 
     def load(self, url):  
-        body = url.request()
-        self.text = lex(body)
-        self.display_list = layout(self.text, self.width)
-        self.max_scroll = max(y for x, y, c in self.display_list) - self.height + VSTEP
-        self.scroll = 0
+        try:
+            body = url.request()
+            self.text = lex(body)
+            self.display_list = layout(self.text, self.width)
+            self.max_scroll = max(y for x, y, c in self.display_list) - self.height + VSTEP
+            self.scroll = 0
+            self.draw()
+        except Exception as e:
+            print(f"Error loading page: {e}")
+            self.load_blank_page()
+
+    def load_blank_page(self):
+        self.display_list = []
+        self.document = None
+        self.url = "about:blank"
         self.draw()
 
 def layout(text, width):
