@@ -7,39 +7,119 @@ SCROLL_STEP = 100
 HSTEP, VSTEP = 13, 18    
 
 class Text: 
-    def __init__(self, text):
+    def __init__(self, text, parent):
         self.text = text
+        self.children = []
+        self.parent = parent
     
     def __repr__(self):
         return f"Text({self.text})"
 
-class Tag:
-    def __init__(self, tag):
+class Element:
+    def __init__(self, tag, attributes, parent):
         self.tag = tag
+        self.children = []
+        self.attributes = attributes
+        self.parent = parent
     
     def __repr__(self):
-        return f"Tag({self.tag})"
+        return f"<{self.tag} attributes={self.attributes}>"
 
-def lex(body):
-    out = []
-    buffer = ""
-    in_tag = False
-  
-    for c in body:
-        if c == "<":
-            in_tag = True
-            if buffer: out.append(Text(buffer))
-            buffer = ""
-        elif c == ">":
-            in_tag = False
-            out.append(Tag(buffer))
-            buffer = ""
-        else:
-            buffer += c
-    if not in_tag and buffer:
-        out.append(Text(buffer))
+SELF_CLOSING_TAGS = ["area", "base", "br", "col", "command", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]
+class HTMLParser:
+    HEAD_TAGS = [
+        "base", "basefont", "bgsound", "noscript",
+        "link", "meta", "title", "style", "script",
+    ]
 
-    return out
+    def __init__(self, body):
+        self.body = body
+        self.unfinished = []
+    
+    def parse(self):
+        text = ""
+        in_tag = False
+        for c in self.body:
+            if c == '<':
+                in_tag = True
+                if text: self.add_text(text)
+                text = ""
+            elif c == '>':
+                in_tag = False
+                self.add_tag(text)
+                text=""
+            else:
+                text += c
+
+        if not in_tag and text: self.add_text(text)
+
+        return self.finish()
+    
+    def implicit_tags(self, tag):
+        while True:
+            open_tags = [node.tag for node in self.unfinished]
+            if open_tags == [] and tag != "html":
+                self.add_tag("html")
+            elif open_tags == ["html"] and tag not in ["head", "body", "/html"]:
+                if tag in self.HEAD_TAGS:
+                    self.add_tag("head")
+                else:
+                    self.add_tag("body")
+            elif open_tags == ["html", "head"] and tag not in ["/head"] + self.HEAD_TAGS:
+                self.add_tag("/head")
+            else:
+                break
+    
+    def add_text(self, text):
+        if text.isspace(): return
+        self.implicit_tags(None)
+
+        parent = self.unfinished[-1] if self.unfinished else None
+        node = Text(text, parent)
+        parent.children.append(node)
+    
+    def add_tag(self, tag):
+        tag, attributes = self.get_attributes(tag)
+        if tag.startswith("!"): return
+        self.implicit_tags(tag)
+
+        if tag.startswith("/"):
+            if len(self.unfinished) == 1: return
+
+            node = self.unfinished.pop()
+            parent = self.unfinished[-1]
+            parent.children.append(node)
+        elif tag in SELF_CLOSING_TAGS:
+            parent = self.unfinished[-1]
+            node = Element(tag, attributes, parent)
+            parent.children.append(node)
+        else: 
+            parent = self.unfinished[-1] if self.unfinished else None
+            node = Element(tag, attributes, parent)
+            self.unfinished.append(node)
+
+    def finish(self):
+        if not self.unfinished:
+            self.implicit_tags(None)
+
+        while len(self.unfinished) > 1:
+            node = self.unfinished.pop()
+            parent = self.unfinished[-1]
+            parent.children.append(node)
+
+        return self.unfinished.pop()
+    
+    def get_attributes(self, text):
+        parts = text.split()
+        tag = parts[0].casefold()
+        attributes = {}
+        for attrpair in parts[1:]:
+            if "=" in attrpair:
+                attr, value = attrpair.split("=", 1)
+                attributes[attr.casefold()] = value.strip("\"'")
+            else:
+                attributes[attrpair.casefold()] = True
+        return tag, attributes
 
 FONTS = {}
 
@@ -53,8 +133,8 @@ def get_font(size, weight, style):
     return FONTS[key][0]
 
 class Layout:
-    def __init__(self, tokens, width=WIDTH):
-        self.tokens = tokens
+    def __init__(self, tree, width=WIDTH):
+        self.tokens = tree
         self.width = width
         self.display_list = []
 
@@ -68,9 +148,47 @@ class Layout:
         self.is_abbr = False
 
         self.line = []
-        for tok in tokens:
-            self.token(tok)
+        self.recurse(tree)
         self.flush()
+
+    def open_tag(self, tag):
+        if tag == 'i':
+            self.style = "italic"
+        elif tag == "b":
+            self.weight = "bold"
+        elif tag == "small":
+            self.size -= 2
+        elif tag == "big":
+            self.size += 4
+        elif tag == "sup":
+            self.is_superscript = True
+            self.size = self.normal_size // 2
+        elif tag == "abbr":
+            self.is_abbr = True
+
+    def close_tag(self, tag):
+        if tag == "i":
+            self.style = "roman"
+        elif tag == "b":
+            self.weight = "normal"
+        elif tag == "small":
+            self.size += 2
+        elif tag == "big":
+            self.size -= 4
+        elif tag == "sup":
+            self.is_superscript = False
+            self.size = self.normal_size
+        elif tag == "abbr":
+            self.is_abbr = False
+
+    def recurse(self, tree):
+        if isinstance(tree, Text):
+            self.text(tree)
+        else:
+            self.open_tag(tree.tag)
+            for child in tree.children:
+                self.recurse(child)
+            self.close_tag(tree.tag)
 
     def token(self, tok):
         if isinstance(tok, Text):
@@ -224,7 +342,7 @@ class Browser:
 
      
         if should_update:
-            self.display_list = Layout(self.text, e.width).display_list
+            self.display_list = Layout(self.nodes, e.width).display_list
             self.max_scroll = max(y for x, y, c, font, y_offset in self.display_list) - self.height + VSTEP
             self.scroll = min(self.scroll, self.max_scroll)
             self.draw()
@@ -268,12 +386,16 @@ class Browser:
 
     def load(self, url):  
         body = url.request()
-        self.text = lex(body)
-        self.display_list = Layout(self.text, self.width).display_list
+        self.nodes = HTMLParser(body).parse()
+        self.display_list = Layout(self.nodes, self.width).display_list
         self.max_scroll = max(y for x, y, c, font, y_offset in self.display_list) - self.height + VSTEP
         self.scroll = 0
         self.draw()
 
+def print_tree(node, indent=0):
+    print(" " * indent, node)
+    for child in node.children:
+        print_tree(child, indent + 2)
 
 if __name__ == "__main__":
     import sys
