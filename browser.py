@@ -110,6 +110,14 @@ class HTMLParser:
         else: 
             parent = self.unfinished[-1] if self.unfinished else None
             node = Element(tag, attributes, parent)
+
+            if tag in ["p", "li"]:
+                while self.unfinished and self.unfinished[-1].tag in ["p", "li"]:
+                    self.unfinished.pop()
+
+            if tag == "li" and self.unfinished and self.unfinished[-1].tag not in ["ol", "ul"]:
+                self.add_tag("ul")
+
             self.unfinished.append(node)
 
     def finish(self):
