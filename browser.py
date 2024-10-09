@@ -40,9 +40,18 @@ class HTMLParser:
         text = ""
         in_tag = False
         in_comment = False
+        in_script = False
 
         for c in self.body:
-            if in_comment:
+            if in_script:
+                if c == "<" and self.body[self.body.index(c):].startswith("</script>"):
+                    in_script = False
+                    self.add_text(text)
+                    text = ""
+                    in_tag = True
+                else:
+                    text += c
+            elif in_comment:
                 if c == '>' and text.endswith("-->"):
                     in_comment = False
                     text = ""
@@ -57,8 +66,11 @@ class HTMLParser:
                 text = ""
             elif c == '>':
                 in_tag = False
-                self.add_tag(text)
-                text=""
+                if text.lower().startswith("script"):
+                    in_script = True
+                else:
+                    self.add_tag(text)
+                text = ""
             else:
                 text += c
 

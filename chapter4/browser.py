@@ -39,21 +39,47 @@ class HTMLParser:
     def parse(self):
         text = ""
         in_tag = False
+        in_comment = False
+        in_script = False
+
         for c in self.body:
-            if c == '<':
+            if in_script:
+                if c == "<" and self.body[self.body.index(c):].startswith("</script>"):
+                    in_script = False
+                    self.add_text(text)
+                    text = ""
+                    in_tag = True
+                else:
+                    text += c
+            elif in_comment:
+                if c == '>' and text.endswith("-->"):
+                    in_comment = False
+                    text = ""
+                else:
+                    text += c
+            elif text.startswith("<!--"):
+                in_comment = True
+                text = ""
+            elif c == '<':
                 in_tag = True
-                if text: self.add_text(text)
+                if text: self.add_text(self.handle_entities(text))
                 text = ""
             elif c == '>':
                 in_tag = False
-                self.add_tag(text)
-                text=""
+                if text.lower().startswith("script"):
+                    in_script = True
+                else:
+                    self.add_tag(text)
+                text = ""
             else:
                 text += c
 
-        if not in_tag and text: self.add_text(text)
+        if not in_tag and text: self.add_text(self.handle_entities(text))
 
         return self.finish()
+    
+    def handle_entities(self, text):
+        return text.replace("&lt;", "<").replace("&gt;", ">")
     
     def implicit_tags(self, tag):
         while True:
@@ -73,7 +99,7 @@ class HTMLParser:
     def add_text(self, text):
         if text.isspace(): return
         self.implicit_tags(None)
-
+        
         parent = self.unfinished[-1] if self.unfinished else None
         node = Text(text, parent)
         parent.children.append(node)
@@ -96,6 +122,14 @@ class HTMLParser:
         else: 
             parent = self.unfinished[-1] if self.unfinished else None
             node = Element(tag, attributes, parent)
+
+            if tag in ["p", "li"]:
+                while self.unfinished and self.unfinished[-1].tag in ["p", "li"]:
+                    self.unfinished.pop()
+
+            if tag == "li" and self.unfinished and self.unfinished[-1].tag not in ["ol", "ul"]:
+                self.add_tag("ul")
+
             self.unfinished.append(node)
 
     def finish(self):
