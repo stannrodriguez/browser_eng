@@ -39,10 +39,21 @@ class HTMLParser:
     def parse(self):
         text = ""
         in_tag = False
+        in_comment = False
+
         for c in self.body:
-            if c == '<':
+            if in_comment:
+                if c == '>' and text.endswith("-->"):
+                    in_comment = False
+                    text = ""
+                else:
+                    text += c
+            elif text.startswith("<!--"):
+                in_comment = True
+                text = ""
+            elif c == '<':
                 in_tag = True
-                if text: self.add_text(text)
+                if text: self.add_text(self.handle_entities(text))
                 text = ""
             elif c == '>':
                 in_tag = False
@@ -51,9 +62,12 @@ class HTMLParser:
             else:
                 text += c
 
-        if not in_tag and text: self.add_text(text)
+        if not in_tag and text: self.add_text(self.handle_entities(text))
 
         return self.finish()
+    
+    def handle_entities(self, text):
+        return text.replace("&lt;", "<").replace("&gt;", ">")
     
     def implicit_tags(self, tag):
         while True:
@@ -73,7 +87,7 @@ class HTMLParser:
     def add_text(self, text):
         if text.isspace(): return
         self.implicit_tags(None)
-
+        
         parent = self.unfinished[-1] if self.unfinished else None
         node = Text(text, parent)
         parent.children.append(node)
