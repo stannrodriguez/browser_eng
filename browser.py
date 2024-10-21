@@ -625,6 +625,7 @@ class Browser:
                  and node.tag == "link"
                  and node.attributes.get("rel") == "stylesheet"
                  and "href" in node.attributes]
+        # Debug this for later. Right now, it makes the browser too slow.
         # for link in links:
         #     style_url = url.resolve(link)
         #     try:
