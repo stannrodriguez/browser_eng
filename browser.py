@@ -9,7 +9,6 @@ WIDTH, HEIGHT = 800, 600
 HSTEP, VSTEP = 13, 18
 SCROLL_STEP = 100
 
-
 class URL:
     def __init__(self, url):
         try:
@@ -33,6 +32,36 @@ class URL:
             print("Malformed URL found, falling back to the WBE home page.")
             print("  URL was: " + url)
             self.__init__("https://browser.engineering")
+
+    def resolve(self, url):
+        # If the URL contains "://", it's already a full URL, so return a new URL object
+        if "://" in url: return URL(url)
+        
+        # If the URL doesn't start with "/", it's relative to the current path
+        if not url.startswith("/"):
+            # Split the current path to get the directory
+            # Get the directory part of the current path
+            dir, _ = self.path.rsplit("/", 1)
+            
+            # Handle "../" in the URL by moving up the directory tree
+            while url.startswith("../"):
+                # Remove "../" from the start of the URL
+                _, url = url.split("/", 1)
+                # Move up one level in the directory if possible
+                if "/" in dir:
+                    dir, _ = dir.rsplit("/", 1)
+            
+            # Combine the directory and the remaining URL
+            url = dir + "/" + url
+        
+        # If the URL starts with "//", it's a protocol-relative URL
+        if url.startswith("//"):
+            # Add the current scheme to the URL
+            return URL(self.scheme + ":" + url)
+        else:
+            # It's a relative URL, so construct a full URL using the current scheme, host, and port
+            return URL(self.scheme + "://" + self.host + \
+                       ":" + str(self.port) + url)
 
     def request(self):
         s = socket.socket(
@@ -67,7 +96,7 @@ class URL:
         assert "content-encoding" not in response_headers
     
         content = response.read()
-        s.close()
+        s.close() 
     
         return content
 
@@ -91,6 +120,7 @@ class Text:
         self.text = text
         self.children = []
         self.parent = parent
+        self.style = {}  # Add this line to initialize style for Text nodes
 
     def __repr__(self):
         return repr(self.text)
@@ -101,6 +131,7 @@ class Element:
         self.attributes = attributes
         self.children = []
         self.parent = parent
+        self.style = {}  # Add this line to initialize style for Element nodes
 
     def __repr__(self):
         attrs = [" " + k + "=\"" + v + "\"" for k, v  in self.attributes.items()]
@@ -108,6 +139,25 @@ class Element:
         for attr in attrs:
             attr_str += attr
         return "<" + self.tag + attr_str + ">"
+    
+class TagSelector:
+    def __init__(self, tag):
+        self.tag = tag
+
+    def matches(self, node):
+        return isinstance(node, Element) and node.tag == self.tag
+    
+class DescendantSelector:
+    def __init__(self, ancestor, descendant):
+        self.ancestor = ancestor
+        self.descendant = descendant
+
+    def matches(self, node):
+        if not self.descendant.matches(node): return False
+        while node.parent:
+            if self.ancestor.matches(node.parent): return True
+            node = node.parent
+        return False
 
 @wbetools.patchable
 def print_tree(node, indent=0):
@@ -219,6 +269,110 @@ class HTMLParser:
             parent = self.unfinished[-1]
             parent.children.append(node)
         return self.unfinished.pop()
+    
+class CSSParser:
+    def __init__(self, s):
+        self.s = s
+        self.i = 0
+
+    def whitespace(self):
+        while self.i < len(self.s) and self.s[self.i].isspace():
+            self.i += 1
+
+    def literal(self, literal):
+        if not (self.i < len(self.s) and self.s[self.i] == literal):
+            raise Exception("Parsing error")
+        self.i += 1
+
+    def word(self):
+        start = self.i
+        while self.i < len(self.s):
+            if self.s[self.i].isalnum() or self.s[self.i] in "#-.%":
+                self.i += 1
+            else:
+                break
+        return self.s[start:self.i]
+    
+    def pair(self):
+        prop = self.word()
+        self.whitespace()
+        self.literal(":")
+        self.whitespace()
+        value = self.word()
+
+        return prop.casefold(), value
+    
+    def body(self):
+        pairs = {}
+        while self.i < len(self.s) and self.s[self.i] != "}":
+            try:
+                prop, value = self.pair()
+                pairs[prop.casefold()] = value
+                self.whitespace()
+                self.literal(";")
+                self.whitespace()
+            except Exception:
+                why = self.ignore_until([";", "}"])
+                if why == ";":
+                    self.literal(";") 
+                    self.whitespace()  
+                else: 
+                    break       
+        return pairs
+    
+    def ignore_until(self, chars):
+        while self.i < len(self.s):
+            if self.s[self.i] in chars:
+                return self.s[self.i]
+            else:
+                self.i += 1
+
+        return None
+    
+    def selector(self):
+        out = TagSelector(self.word().casefold())
+        self.whitespace()
+        while self.i < len(self.s) and self.s[self.i] != "{":
+            tag = self.word()
+            descendant = TagSelector(tag.casefold())
+            out = DescendantSelector(out, descendant)
+            self.whitespace()
+        return out
+    
+    def parse(self):
+        rules = []
+        while self.i < len(self.s):
+            try:
+                self.whitespace()
+                selector = self.selector()
+                self.literal("{")
+                self.whitespace()
+                body = self.body()
+                rules.append((selector, body))
+                self.i += 1
+            except Exception:
+                why = self.ignore_until(["}"])
+                if why == "}":
+                    self.literal("}")
+                    self.whitespace()
+                else:
+                    break
+        return rules
+    
+def style(node, rules):
+    for selector, body in rules:
+        if not selector.matches(node): continue
+        for property, value in body.items():
+            node.style[property] = value
+
+    if isinstance(node, Element) and "style" in node.attributes:
+        pairs = CSSParser(node.attributes["style"]).body()
+        for prop, value in pairs.items():
+            node.style[prop] = value
+    
+    for child in node.children:
+        style(child, rules)
+
 
 BLOCK_ELEMENTS = [
     "html", "body", "article", "section", "nav", "aside",
@@ -234,6 +388,12 @@ def paint_tree(layout_object, display_list):
 
     for child in layout_object.children:
         paint_tree(child, display_list)
+
+def tree_to_list(tree, list):
+    list.append(tree)
+    for child in tree.children:
+        tree_to_list(child, list)
+    return list
 
 class DrawText: 
     def __init__(self, x1, y1, text, font):
@@ -285,13 +445,16 @@ class BlockLayout:
 
     def paint(self):
         cmds = []
-        if isinstance(self.node, Element) and self.node.tag == "pre":
-            x2, y2 = self.x + self.width, self.y + self.height
-            rect = DrawRect(self.x, self.y, x2, y2, "gray")
-            cmds.append(rect)
         if self.layout_mode() == "inline":
             for x, y, word, font in self.display_list:
                 cmds.append(DrawText(x,y, word, font))
+
+        bgcolor = self.node.style.get("background-color", "transparent")
+        if bgcolor != "transparent":
+            x2, y2 = self.x + self.width, self.y + self.height
+            rect = DrawRect(self.x, self.y, x2, y2, bgcolor)
+            cmds.append(rect)
+
         return cmds
     
     def layout(self):
@@ -430,9 +593,12 @@ class DocumentLayout:
         self.y = VSTEP
         child.layout()
         self.height = child.height
+
     
     def paint(self):
         return []
+    
+DEFAULT_STYLE_SHEET = CSSParser(open("browser.css").read()).parse()
 class Browser:
     def __init__(self):
         self.window = tkinter.Tk()
@@ -450,6 +616,25 @@ class Browser:
     def load(self, url):
         body = url.request()
         self.nodes = HTMLParser(body).parse()
+
+        ## Applying styles
+        rules = DEFAULT_STYLE_SHEET.copy()
+        links = [node.attributes["href"]
+                 for node in tree_to_list(self.nodes, [])
+                 if isinstance(node, Element)
+                 and node.tag == "link"
+                 and node.attributes.get("rel") == "stylesheet"
+                 and "href" in node.attributes]
+        # for link in links:
+        #     style_url = url.resolve(link)
+        #     try:
+        #         body = style_url.request()
+        #     except Exception:
+        #         continue
+        #     rules.extend(CSSParser(body).parse())
+        style(self.nodes, rules)
+
+
         self.document = DocumentLayout(self.nodes)
         self.document.layout()
         self.display_list = []
