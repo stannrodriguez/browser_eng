@@ -109,7 +109,6 @@ FONTS = {}
 def get_font(size, weight, style):
     key = (size, weight, style)
     if key not in FONTS:
-        print(size, weight, style)
         font = tkinter.font.Font(size=size, weight=weight,
             slant=style)
         label = tkinter.Label(font=font)
@@ -382,7 +381,6 @@ def style(node, rules):
     for selector, body in rules:
         if not selector.matches(node): continue
         for property, value in body.items():
-            print(property, value)
             node.style[property] = value
 
     if isinstance(node, Element) and "style" in node.attributes:
