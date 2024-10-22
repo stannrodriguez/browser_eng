@@ -109,6 +109,7 @@ FONTS = {}
 def get_font(size, weight, style):
     key = (size, weight, style)
     if key not in FONTS:
+        print(size, weight, style)
         font = tkinter.font.Font(size=size, weight=weight,
             slant=style)
         label = tkinter.Label(font=font)
@@ -120,7 +121,6 @@ class Text:
         self.text = text
         self.children = []
         self.parent = parent
-        self.style = {}  # Add this line to initialize style for Text nodes
 
     def __repr__(self):
         return repr(self.text)
@@ -131,7 +131,6 @@ class Element:
         self.attributes = attributes
         self.children = []
         self.parent = parent
-        self.style = {}  # Add this line to initialize style for Element nodes
 
     def __repr__(self):
         attrs = [" " + k + "=\"" + v + "\"" for k, v  in self.attributes.items()]
@@ -143,6 +142,7 @@ class Element:
 class TagSelector:
     def __init__(self, tag):
         self.tag = tag
+        self.priority = 1
 
     def matches(self, node):
         return isinstance(node, Element) and node.tag == self.tag
@@ -151,6 +151,7 @@ class DescendantSelector:
     def __init__(self, ancestor, descendant):
         self.ancestor = ancestor
         self.descendant = descendant
+        self.priority = ancestor.priority + descendant.priority
 
     def matches(self, node):
         if not self.descendant.matches(node): return False
@@ -158,6 +159,10 @@ class DescendantSelector:
             if self.ancestor.matches(node.parent): return True
             node = node.parent
         return False
+
+def cascade_priority(rule):
+    selector, body = rule
+    return selector.priority
 
 @wbetools.patchable
 def print_tree(node, indent=0):
@@ -359,16 +364,40 @@ class CSSParser:
                     break
         return rules
     
+INHERITED_PROPERTIES = {
+    "font-size": "16px",
+    "font-style": "normal",
+    "font-weight": "normal",
+    "color": "black",
+}
+    
 def style(node, rules):
+    node.style = {}
+    for property, default_value in INHERITED_PROPERTIES.items():
+        if node.parent:
+            node.style[property] = node.parent.style[property]
+        else:
+            node.style[property] = default_value
+
     for selector, body in rules:
         if not selector.matches(node): continue
         for property, value in body.items():
+            print(property, value)
             node.style[property] = value
 
     if isinstance(node, Element) and "style" in node.attributes:
         pairs = CSSParser(node.attributes["style"]).body()
         for prop, value in pairs.items():
             node.style[prop] = value
+
+    if node.style["font-size"].endswith("%"):
+        if node.parent:
+            parent_font_size = node.parent.style["font-size"]
+        else:
+            parent_font_size = INHERITED_PROPERTIES["font-size"]
+        node_pct = float(node.style["font-size"][:-1]) / 100
+        parent_px = float(parent_font_size[:-2])
+        node.style['font-size'] = str(node_pct * parent_px) + "px"
     
     for child in node.children:
         style(child, rules)
@@ -396,16 +425,16 @@ def tree_to_list(tree, list):
     return list
 
 class DrawText: 
-    def __init__(self, x1, y1, text, font):
+    def __init__(self, x1, y1, text, font, color):
         self.top = y1
         self.left = x1
         self.bottom = y1 + font.metrics("linespace")
         self.text = text
         self.font = font
-
+        self.color = color
     def execute(self, scroll, canvas):
         canvas.create_text(self.left, self.top - scroll,
-                            text=self.text, font=self.font, anchor='nw')
+                            text=self.text, font=self.font, anchor='nw', fill=self.color)
 
 class DrawRect:
     def __init__(self, x1, y1, x2, y2, color):
@@ -446,8 +475,8 @@ class BlockLayout:
     def paint(self):
         cmds = []
         if self.layout_mode() == "inline":
-            for x, y, word, font in self.display_list:
-                cmds.append(DrawText(x,y, word, font))
+            for x, y, word, font, color in self.display_list:
+                cmds.append(DrawText(x,y, word, font, color))
 
         bgcolor = self.node.style.get("background-color", "transparent")
         if bgcolor != "transparent":
@@ -523,35 +552,43 @@ class BlockLayout:
         
     def flush(self):
         if not self.line: return
-        metrics = [font.metrics() for x, word, font in self.line]
+        metrics = [font.metrics() for x, word, font, color in self.line]
         max_ascent = max([metric["ascent"] for metric in metrics])
         baseline = self.cursor_y + 1.25 * max_ascent
-        for rel_x, word, font in self.line:
+        for rel_x, word, font, color in self.line:
             x = self.x + rel_x
             y = self.y + baseline - font.metrics("ascent")
-            self.display_list.append((x, y, word, font))
+            self.display_list.append((x, y, word, font, color))
         self.cursor_x = 0
         self.line = []
         max_descent = max([metric["descent"] for metric in metrics])
         self.cursor_y = baseline + 1.25 * max_descent
 
-    def word(self, word):
-        font = get_font(self.size, self.weight, self.style)
+    def word(self, node, word):
+        weight = node.style['font-weight']
+        style = node.style['font-style']
+        if style == 'normal':
+            style = 'roman'
+        size = int(float(node.style['font-size'][:-2]) * .75)
+        font = get_font(size, weight, style)
+        
+        color = node.style["color"]
+
         w = font.measure(word)
         if self.cursor_x + w > self.width:
             self.flush()
-        self.line.append((self.cursor_x, word, font))
+        self.line.append((self.cursor_x, word, font, color))
         self.cursor_x += w + font.measure(" ")
 
-    def recurse(self, tree):
-        if isinstance(tree, Text):
-            for word in tree.text.split():
-                self.word(word)
+    def recurse(self, node):
+        if isinstance(node, Text):
+            for word in node.text.split():
+                self.word(node, word)
         else:
-            self.open_tag(tree.tag)
-            for child in tree.children:
+            self.open_tag(node.tag)
+            for child in node.children:
                 self.recurse(child)
-            self.close_tag(tree.tag)
+            self.close_tag(node.tag)
 
     def open_tag(self, tag):
         if tag == "i":
@@ -605,7 +642,8 @@ class Browser:
         self.canvas = tkinter.Canvas(
             self.window,
             width=WIDTH,
-            height=HEIGHT
+            height=HEIGHT,
+            bg="white"
         )
         self.canvas.pack()
 
@@ -633,7 +671,7 @@ class Browser:
         #     except Exception:
         #         continue
         #     rules.extend(CSSParser(body).parse())
-        style(self.nodes, rules)
+        style(self.nodes, sorted(rules, key=cascade_priority))
 
 
         self.document = DocumentLayout(self.nodes)
