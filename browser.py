@@ -352,9 +352,10 @@ class CSSParser:
                 self.literal("{")
                 self.whitespace()
                 body = self.body()
+                self.literal("}")
                 rules.append((selector, body))
-                self.i += 1
-            except Exception:
+            except Exception as e:
+                # print(f"Error parsing CSS: {e}")
                 why = self.ignore_until(["}"])
                 if why == "}":
                     self.literal("}")
@@ -661,16 +662,18 @@ class Browser:
                  and node.tag == "link"
                  and node.attributes.get("rel") == "stylesheet"
                  and "href" in node.attributes]
-        # Debug this for later. Right now, it makes the browser too slow.
+        
+        # Debug this later. Right now, it causes the browser to freeze.
         # for link in links:
-        #     style_url = url.resolve(link)
         #     try:
-        #         body = style_url.request()
-        #     except Exception:
+        #         style_url = url.resolve(link)
+        #         style_body = style_url.request()
+        #         rules.extend(CSSParser(style_body).parse())
+        #     except Exception as e:
+        #         print(f"Error loading stylesheet {link}: {e}")
         #         continue
-        #     rules.extend(CSSParser(body).parse())
-        style(self.nodes, sorted(rules, key=cascade_priority))
 
+        style(self.nodes, sorted(rules, key=cascade_priority))
 
         self.document = DocumentLayout(self.nodes)
         self.document.layout()
