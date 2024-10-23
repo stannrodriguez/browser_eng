@@ -524,6 +524,7 @@ class BlockLayout:
         else:
             self.height = self.cursor_y
 
+
     def layout_mode(self):
         if isinstance(self.node, Text):
             return "inline"
