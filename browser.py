@@ -530,12 +530,6 @@ class BlockLayout:
 
         wbetools.record("layout_post", self)
 
-    def layout_intermediate(self):
-        previous = None
-        for child in self.node.children:
-            next = BlockLayout(child, self, previous)
-            self.children.append(next)
-            previous = next
 
     def layout_mode(self):
         if isinstance(self.node, Text):
@@ -584,35 +578,9 @@ class BlockLayout:
             for word in node.text.split():
                 self.word(node, word)
         else:
-            self.open_tag(node.tag)
             for child in node.children:
                 self.recurse(child)
-            self.close_tag(node.tag)
 
-    def open_tag(self, tag):
-        if tag == "i":
-            self.style = "italic"
-        elif tag == "b":
-            self.weight = "bold"
-        elif tag == "small":
-            self.size -= 2
-        elif tag == "big":
-            self.size += 4
-        elif tag == "br":
-            self.flush()
-
-    def close_tag(self, tag):
-        if tag == "i":
-            self.style = "roman"
-        elif tag == "b":
-            self.weight = "normal"
-        elif tag == "small":
-            self.size += 2
-        elif tag == "big":
-            self.size -= 4
-        elif tag == "p":
-            self.flush()
-            self.cursor_y += VSTEP
 class DocumentLayout:
     def __init__(self, node):
         self.node = node
