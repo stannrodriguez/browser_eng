@@ -100,11 +100,26 @@ class URL:
     
         assert "transfer-encoding" not in response_headers
         assert "content-encoding" not in response_headers
+
+        if status in ["301", "302", "307", "308"]:
+            if 'location' not in response_headers:
+                raise Exception("Redirect response missing Location header")
+            location = response_headers['location']
+            new_url = self.join(location)
+            return self.resolve(new_url).request()
     
         content = response.read()
         s.close() 
     
         return content
+
+    def join(self, url):
+        if "://" in url:
+            return url
+        elif url.startswith("/"):
+            return self.scheme + "://" + self.host + url
+        else:
+            return self.scheme + "://" + self.host + self.path.rsplit("/", 1)[0] + "/" + url 
 
     def __repr__(self):
         return "URL(scheme={}, host={}, port={}, path={!r})".format(
