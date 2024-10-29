@@ -13,6 +13,8 @@ import urllib.parse
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import wbetools
 from chapter2.browser_no_exercises import WIDTH, HEIGHT, HSTEP, VSTEP, SCROLL_STEP
 from chapter3.browser_no_exercises import FONTS, get_font
 from chapter4.browser_no_exercises import Text, Element, print_tree, HTMLParser
@@ -83,7 +85,7 @@ class URL:
         s.close()
         return content
 
-DEFAULT_STYLE_SHEET = CSSParser(open("browser8.css").read()).parse()
+DEFAULT_STYLE_SHEET = CSSParser(open("browser.css").read()).parse()
 
 INPUT_WIDTH_PX = 200
 
