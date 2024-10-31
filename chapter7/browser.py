@@ -753,6 +753,7 @@ class Browser:
 
         self.window.bind("<Down>", self.handle_down)
         self.window.bind("<Up>", self.handle_up)
+        self.window.bind("<MouseWheel>", self.handle_mousewheel)
         self.window.bind("<Button-1>", self.handle_click)
         self.window.bind("<Key>", self.handle_key)
         self.window.bind("<Return>", self.handle_enter)
@@ -796,6 +797,13 @@ class Browser:
         else:
             tab_y = e.y - self.chrome.bottom
             self.active_tab.click(e.x, tab_y)
+        self.draw()
+
+    def handle_mousewheel(self, e):
+        if e.delta > 0:
+            self.active_tab.scrollup()
+        else:
+            self.active_tab.scrolldown()
         self.draw()
     
 class Rect:
