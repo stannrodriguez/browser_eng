@@ -732,6 +732,9 @@ class Tab:
         max_y = max(self.document.height + 2*VSTEP - self.tab_height, 0)
         self.scroll = min(self.scroll + SCROLL_STEP, max_y)
 
+    def scrollup(self):
+        self.scroll = max(self.scroll - SCROLL_STEP, 0)
+
 class Browser:
     def __init__(self):
         self.tabs = []
@@ -749,6 +752,7 @@ class Browser:
         self.chrome = Chrome(self)
 
         self.window.bind("<Down>", self.handle_down)
+        self.window.bind("<Up>", self.handle_up)
         self.window.bind("<Button-1>", self.handle_click)
         self.window.bind("<Key>", self.handle_key)
         self.window.bind("<Return>", self.handle_enter)
@@ -780,6 +784,10 @@ class Browser:
 
     def handle_down(self, e):
         self.active_tab.scrolldown()
+        self.draw()
+
+    def handle_up(self, e):
+        self.active_tab.scrollup()
         self.draw()
 
     def handle_click(self, e):
