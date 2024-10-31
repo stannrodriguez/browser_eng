@@ -9,6 +9,10 @@ SCROLL_STEP = 100
 
 class URL:
     def __init__(self, url):
+        # Add http:// prefix if no scheme is specified
+        if not url.startswith("http://") and not url.startswith("https://"):
+            url = "https://" + url
+            
         try:
             self.scheme, url = url.split("://", 1)
             assert self.scheme in ["http", "https"]
