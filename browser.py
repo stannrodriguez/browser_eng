@@ -9,6 +9,14 @@ SCROLL_STEP = 100
 
 class URL:
     def __init__(self, url):
+        # Handle file paths
+        if url.startswith('/') or ':' not in url:
+            self.scheme = 'file'
+            self.host = ''
+            self.path = url
+            self.port = None
+            return
+        
         # Add http:// prefix if no scheme is specified
         if not url.startswith("http://") and not url.startswith("https://"):
             url = "https://" + url
