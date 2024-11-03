@@ -12,7 +12,7 @@ class URL:
         # Add http:// prefix if no scheme is specified
         if not url.startswith("http://") and not url.startswith("https://"):
             url = "https://" + url
-            
+
         try:
             self.scheme, url = url.split("://", 1)
             assert self.scheme in ["http", "https"]
@@ -189,11 +189,6 @@ def cascade_priority(rule):
     selector, body = rule
     return selector.priority
 
-def print_tree(node, indent=0):
-    print(" " * indent, node)
-    for child in node.children:
-        print_tree(child, indent + 2)
-
 def print_html(node):
     print(node)
     for child in node.children:
@@ -216,12 +211,62 @@ class HTMLParser:
             elif c == ">":
                 in_tag = False
                 self.add_tag(text)
+                # Check for refresh meta tag after parsing each tag
+                self.check_meta_refresh()
                 text = ""
             else:
                 text += c
         if not in_tag and text:
             self.add_text(text)
         return self.finish()
+
+    def check_meta_refresh(self):
+        # Look at the most recently added tag
+        if not self.unfinished:
+            return
+        
+        node = self.unfinished[-1]
+        if not isinstance(node, Element):
+            return
+            
+        if node.tag == "meta" and \
+           node.attributes.get("http-equiv", "").lower() == "refresh":
+            print("Found refresh meta tag")
+            content = node.attributes.get("content", "")
+            if not content:
+                return
+                
+            # Parse the content attribute
+            parts = content.split(";", 1)
+            delay = int(parts[0])
+            url = parts[1].split("=", 1)[1] if len(parts) > 1 else None
+            
+            # Schedule the refresh/redirect
+            print(f"Scheduling refresh/redirect: delay={delay}, url={url}")
+            if url:
+                self.schedule_redirect(delay, url)
+            else:
+                self.schedule_refresh(delay)
+
+    def schedule_redirect(self, delay, url):
+        # Get the browser instance from the parent chain
+        node = self.unfinished[-1]
+        while node.parent:
+            node = node.parent
+        browser = node.browser
+
+        # Schedule the redirect after the delay
+        browser.window.after(delay * 1000, lambda: browser.active_tab.load(browser.active_tab.url.resolve(url)))
+
+    def schedule_refresh(self, delay):
+        # Get the browser instance from the parent chain
+        node = self.unfinished[-1]
+        while node.parent:
+            node = node.parent
+        browser = node.browser
+
+        # Schedule the page refresh after the delay
+        browser.window.after(delay * 1000, lambda: browser.active_tab.load(browser.active_tab.url))
 
     def get_attributes(self, text):
         parts = text.split()
@@ -771,6 +816,11 @@ class Browser:
         self.draw()
 
     def handle_key(self, e):
+        if e.keysym == "BackSpace" or e.keycode == 855638143:
+            self.chrome.delete_char()
+            self.draw()
+            return
+        
         if len(e.char) == 0: return
         if not (0x20 <= ord(e.char) < 0x7f): return
         self.chrome.keypress(e.char)
@@ -898,6 +948,10 @@ class Chrome:
                 if self.tab_rect(i).containsPoint(x, y):
                     self.browser.active_tab = tab
                     break
+
+    def delete_char(self):
+        if self.focus == "address bar":
+            self.address_bar = self.address_bar[:-1]
 
     def keypress(self, char):
         if self.focus == "address bar":
