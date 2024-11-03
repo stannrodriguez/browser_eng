@@ -816,6 +816,11 @@ class Browser:
         self.draw()
 
     def handle_key(self, e):
+        if e.keysym == "BackSpace" or e.keycode == 855638143:
+            self.chrome.delete_char()
+            self.draw()
+            return
+        
         if len(e.char) == 0: return
         if not (0x20 <= ord(e.char) < 0x7f): return
         self.chrome.keypress(e.char)
@@ -943,6 +948,10 @@ class Chrome:
                 if self.tab_rect(i).containsPoint(x, y):
                     self.browser.active_tab = tab
                     break
+
+    def delete_char(self):
+        if self.focus == "address bar":
+            self.address_bar = self.address_bar[:-1]
 
     def keypress(self, char):
         if self.focus == "address bar":
