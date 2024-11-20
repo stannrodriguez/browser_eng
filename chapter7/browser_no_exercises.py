@@ -2,6 +2,9 @@
 This file compiles the code in Web Browser Engineering,
 up to and including Chapter 7 (Handling Buttons and Links),
 without exercises.
+
+NOTE: This is not my code. It is included here for my own learning purposes.
+The original code can be found at https://github.com/browserengineering/book
 """
 
 import tkinter
