@@ -712,6 +712,7 @@ class Tab:
         self.url = None
         self.tab_height = tab_height
         self.history = []
+        self.history_index = -1
 
     def __repr__(self):
         return f"Tab(url: {self.url}, height: {self.tab_height})"
@@ -732,15 +733,20 @@ class Tab:
                 return self.load(url)
             elt = elt.parent
 
-    def go_back(self):
-        if len(self.history) > 1:
-            self.history.pop()
-            back = self.history.pop()
-            self.load(back)
+    def go_back(self):        
+        # Move back one step
+        self.history_index = max(-len(self.history), self.history_index - 1)
+        self.load(self.history[self.history_index], False)
 
-    def load(self, url):
+    def go_forward(self):
+        # Don't increment beyond the end of history
+        self.history_index = min(self.history_index + 1, -1)        
+        self.load(self.history[self.history_index], False)
+
+    def load(self, url, update_history=True):
         self.url = url
-        self.history.append(url)
+        if update_history:
+            self.history.append(url)
         body = url.request()
         self.nodes = HTMLParser(body).parse()
 
@@ -925,9 +931,16 @@ class Chrome:
             self.urlbar_top + self.padding,
             self.padding + back_width,
             self.urlbar_bottom - self.padding)
+        
+        forward_width = self.font.measure(">") + 2*self.padding
+        self.forward_rect = Rect(
+            self.back_rect.right + self.padding,
+            self.urlbar_top + self.padding,
+            self.back_rect.right + self.padding + forward_width,
+            self.urlbar_bottom - self.padding)
 
         self.address_rect = Rect(
-            self.back_rect.top + self.padding,
+            1.5*self.back_rect.top + self.padding,
             self.urlbar_top + self.padding,
             WIDTH - self.padding,
             self.urlbar_bottom - self.padding)
@@ -940,6 +953,8 @@ class Chrome:
             self.browser.new_tab(URL("https://browser.engineering/"))
         elif self.back_rect.containsPoint(x, y):
             self.browser.active_tab.go_back()
+        elif self.forward_rect.containsPoint(x, y):
+            self.browser.active_tab.go_forward()
         elif self.address_rect.containsPoint(x, y):
             self.focus = "address bar"
             self.address_bar = ""
@@ -1015,6 +1030,12 @@ class Chrome:
             self.back_rect.left + self.padding,
             self.back_rect.top,
             "<", self.font, "black"))
+        
+        cmds.append(DrawOutline(self.forward_rect, "black", 1))
+        cmds.append(DrawText(
+            self.forward_rect.left + self.padding,
+            self.forward_rect.top,
+            ">", self.font, "black"))
         
         cmds.append(DrawOutline(self.address_rect, "black", 1))
         if self.focus == "address bar":
